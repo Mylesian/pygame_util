@@ -1,0 +1,97 @@
+import sys
+import pygame
+from pygame.sprite import DirtySprite, LayeredDirty
+from pygame.font import Font
+
+class _element(DirtySprite):
+    '''Root of the entity hierarchy. Defines a basic entity that is drawn to the screen every frame.
+       Optional collider param to specify interactions with other entities. Without a collider the object has no physics.'''
+    def __init__(self, x, y, image: pygame.Surface, collider: 'Collider | None' = None):
+        super().__init__()
+        
+        self.image = image
+        self.rect = image.get_rect(center=(x, y))
+        
+        self.collider = collider
+    
+    def update(self, *args, **kwargs):
+        '''Called once per frame by the group self sprite is in. dt is passed into kwargs, use when overriding for time-based updates.
+           If the sprite is changed, set dirty=1 to redraw.'''
+
+class GameElement(_element):
+    '''Object with a collider that is drawn to the screen. Mainly a class to be distinct from UIElement class for UI elements.'''
+    def __init__(self, x, y, image: pygame.Surface, collider: 'Collider'):
+        super().__init__(x, y, image, collider)
+        
+class UIElement(_element):
+    '''Object to be drawn to the screen above all of the GameObjects. Image to be rendered may be a string passed into render parameter.
+       If render is a string, also pass the arguments font and font_color into kwargs for use.'''
+    def __init__(self, x, y, render: pygame.Surface | str, **kwargs):
+        if type(render) is str:
+            try:
+                font: Font = kwargs['font']
+                image = font.render(render, False, kwargs['font_color'])
+            except:
+                print('Something went wrong. Check that you\'re passing both font and font_color into kwargs.')
+                sys.exit()
+        else: image = render
+        
+        assert type(image) is pygame.Surface
+        
+        super().__init__(x, y, image)
+
+class Collider:
+    '''Base hitbox object to store the position of an object. Subclasses can add functionality such as a physics engine.
+       x,y is the center of the object.'''
+    def __init__(self, x, y):
+        self.pos = pygame.math.Vector2(x, y)
+    
+    def collides(self, other: 'Collider') -> bool: ...
+
+class Screen(pygame.Surface):
+    '''An object to be drawn to the screen. Has a collection of GameElements and UIElements that are drawn to the screen.'''
+    def __init__(self, game_elements, ui_elements):
+        self.game_elements = LayeredDirty()
+        self.ui_elements = LayeredDirty()
+        for g in game_elements:
+            self.game_elements.add(g)
+        for u in ui_elements:
+            self.ui_elements.add(u)
+    
+    def update(self, dt):
+        self.game_elements.update(dt=dt)
+        self.ui_elements.update(dt=dt)
+
+class Timer:
+    '''Class that defines a timer that ticks down a set number of seconds. Updates an optional dependent when the timer is done.'''
+    def __init__(self, time: float, start_max: bool, dependent: 'Dependent | None' = None):
+        self.dependent = dependent
+        
+        self.default_time = time
+        
+        if start_max:
+            self.time = time
+        else:
+            self.time = 0
+        
+    def countdown(self, dt: float) -> bool:
+        self.time -= dt
+        if self.time > 0:
+            return False
+        
+        if not self.dependent == None:
+            self.dependent.action()
+        return True
+
+    def reset(self, time = None):
+        if time == None:
+            self.time = self.default_time
+        else:
+            self.time = time
+
+class Dependent:
+    '''Object that is notified to perform an action when its timer finishes counting down.'''
+    def __init__(self, action, time: int, timer_list: list[Timer]):
+        self.action = action
+        depends_on = Timer(time, True)
+        timer_list.append(depends_on)
