@@ -1,4 +1,5 @@
 import sys
+from typing import Sequence
 import pygame
 from pygame.sprite import DirtySprite, LayeredDirty
 from pygame.font import Font
@@ -46,21 +47,29 @@ class Collider:
     def __init__(self, x, y):
         self.pos = pygame.math.Vector2(x, y)
     
-    def collides(self, other: 'Collider') -> bool: ...
+    def collides(self, other: 'Collider') -> bool:
+        self_vect = self._truncated_line(other)
+        other_vect = other._truncated_line(self)
+        if self.pos.x < other.pos.x:
+            return self.pos.x + self_vect.x >= other.pos.x + other_vect.x
+        else:
+            return self.pos.x + self_vect.x <= other.pos.x + other_vect.x
+    def _truncated_line(self, other: 'Collider') -> pygame.math.Vector2: ...
 
 class Screen(pygame.Surface):
     '''An object to be drawn to the screen. Has a collection of GameElements and UIElements that are drawn to the screen.'''
-    def __init__(self, game_elements, ui_elements):
-        self.game_elements = LayeredDirty()
-        self.ui_elements = LayeredDirty()
-        for g in game_elements:
-            self.game_elements.add(g)
-        for u in ui_elements:
-            self.ui_elements.add(u)
+    def __init__(self, bgcolor, elements: Sequence[_element] | None = None):
+        self.elements = LayeredDirty()
+        self.bgcolor = bgcolor
+        
+        if not elements is None:
+            for e in elements:
+                kwargs = {}
+                if type(e) is UIElement: kwargs['layer'] = 1
+                self.elements.add(e, kwargs)
     
     def update(self, dt):
-        self.game_elements.update(dt=dt)
-        self.ui_elements.update(dt=dt)
+        self.elements.update(dt=dt)
 
 class Timer:
     '''Class that defines a timer that ticks down a set number of seconds. Updates an optional dependent when the timer is done.'''
